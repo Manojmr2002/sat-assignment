@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>04 - AI Study Assistant (CrewAI & Pinecone)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="app-layout">
+        <!-- Left Sidebar: Study Library & Crew Overview -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo-icon"><i class="fa-solid fa-graduation-cap"></i></div>
+                <div>
+                    <h2>Study Library</h2>
+                    <p class="sub">Pinecone Vector Store</p>
+                </div>
+            </div>
+
+            <!-- Upload Study Materials -->
+            <div class="upload-section">
+                <form id="uploadForm">
+                    <div class="drop-box" id="dropBox">
+                        <i class="fa-solid fa-cloud-arrow-up drop-icon"></i>
+                        <span>Upload Lecture Notes / PDF</span>
+                        <input type="file" id="fileInput" name="document" accept=".pdf,.txt,.md" hidden>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Material Sets -->
+            <div class="materials-section">
+                <div class="section-title-row">
+                    <span>Uploaded Materials</span>
+                    <button type="button" class="btn-clear" onclick="clearMaterials()"><i class="fa-regular fa-trash-can"></i> Clear</button>
+                </div>
+                <div class="material-list" id="materialList">
+                    {% if materials %}
+                        {% for m in materials %}
+                        <div class="material-pill">
+                            <i class="fa-solid fa-book-bookmark"></i>
+                            <div class="material-meta">
+                                <span class="mat-name">{{ m.filename }}</span>
+                                <span class="mat-stats">{{ m.pages }} pgs • {{ m.chunks }} vector chunks</span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="empty-msg" id="emptyMsg">
+                            <i class="fa-regular fa-folder-open"></i>
+                            <p>Upload textbooks or study notes to begin your research session.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- CrewAI Architecture Badge -->
+            <div class="crew-badge-card">
+                <h4><i class="fa-solid fa-users-gear"></i> Active CrewAI Crew</h4>
+                <ul class="crew-list">
+                    <li><i class="fa-solid fa-magnifying-glass"></i> <strong>Research Agent</strong> — Vector search</li>
+                    <li><i class="fa-solid fa-brain"></i> <strong>Analysis Agent</strong> — Study notes & analogy</li>
+                    <li><i class="fa-solid fa-shield-check"></i> <strong>Review Agent</strong> — Fact verification</li>
+                </ul>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="main-header">
+                <div>
+                    <h1>AI Study Assistant</h1>
+                    <p class="header-sub">Collaborative Multi-Agent Study Companion powered by CrewAI & Pinecone</p>
+                </div>
+                <div class="status-pill {% if ollama_info.available %}online{% else %}offline{% endif %}">
+                    <span class="dot"></span>
+                    <span>{{ ollama_info.message }}</span>
+                </div>
+            </header>
+
+            <!-- Question Input Bar -->
+            <div class="query-bar-container">
+                <form id="askForm" class="query-box">
+                    <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                    <input type="text" id="queryInput" placeholder="What concept or topic would you like to study? (e.g. 'Explain Gradient Descent and why it converges')" autocomplete="off">
+                    <button type="submit" id="askBtn" class="btn-ask">
+                        <i class="fa-solid fa-sparkles"></i> <span>Ask Crew</span>
+                    </button>
+                </form>
+            </div>
+
+            <!-- Results & Workspace Tabs -->
+            <div class="workspace-area">
+                <div class="tab-nav">
+                    <button type="button" class="tab-link active" onclick="switchMainTab('notesTab')">
+                        <i class="fa-solid fa-book-open-reader"></i> Verified Study Guide
+                    </button>
+                    <button type="button" class="tab-link" onclick="switchMainTab('flashcardsTab')">
+                        <i class="fa-solid fa-cards-blank"></i> 3D Flashcards (<span id="flashcardCount">0</span>)
+                    </button>
+                    <button type="button" class="tab-link" onclick="switchMainTab('crewTraceTab')">
+                        <i class="fa-solid fa-timeline"></i> CrewAI Execution Trace
+                    </button>
+                </div>
+
+                <!-- Tab 1: Study Guide Notes -->
+                <div id="notesTab" class="tab-pane active">
+                    <div class="empty-state" id="notesEmpty">
+                        <i class="fa-solid fa-book-sparkles"></i>
+                        <h3>Your Study Guide Will Appear Here</h3>
+                        <p>Ask a question above to trigger the 3-Agent research, analysis, and verification crew.</p>
+                    </div>
+                    <div class="study-card hidden" id="studyCard">
+                        <div class="card-top">
+                            <h2 id="studyTitle">Concept Overview</h2>
+                            <span class="confidence-badge" id="confidenceBadge"><i class="fa-solid fa-badge-check"></i> 98% Fact Grounded</span>
+                        </div>
+                        <div class="study-body" id="studyBody"></div>
+                    </div>
+                </div>
+
+                <!-- Tab 2: 3D Flashcards -->
+                <div id="flashcardsTab" class="tab-pane">
+                    <div class="flashcards-grid" id="flashcardsGrid">
+                        <div class="empty-state">
+                            <i class="fa-solid fa-layer-group"></i>
+                            <h3>No Flashcards Generated Yet</h3>
+                            <p>Ask a question to automatically generate interactive high-yield flashcards.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab 3: CrewAI Execution Trace -->
+                <div id="crewTraceTab" class="tab-pane">
+                    <div class="crew-timeline" id="crewTimeline">
+                        <div class="empty-state">
+                            <i class="fa-solid fa-diagram-project"></i>
+                            <h3>No Active Execution Trace</h3>
+                            <p>When you ask a question, the sequential task flow of Research, Analysis, and Review agents will be tracked here.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/study.js') }}"></script>
+</body>
+</html>

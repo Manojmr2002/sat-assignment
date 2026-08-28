@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>02 - RAG Chatbot (FAISS & Ollama)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="app-layout">
+        <!-- Left Sidebar: Document Knowledge Base -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo-icon"><i class="fa-solid fa-layer-group"></i></div>
+                <div>
+                    <h2>Knowledge Base</h2>
+                    <p class="sub">FAISS Vector Index</p>
+                </div>
+            </div>
+
+            <!-- Upload Area -->
+            <div class="upload-section">
+                <form id="uploadForm" enctype="multipart/form-data">
+                    <div class="drop-box" id="dropBox">
+                        <i class="fa-solid fa-file-arrow-up drop-icon"></i>
+                        <span>Upload PDF Documents</span>
+                        <input type="file" id="fileInput" name="document" accept=".pdf,.txt,.md" hidden>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Document List -->
+            <div class="doc-list-section">
+                <div class="doc-list-header">
+                    <span>Indexed Documents</span>
+                    <button type="button" class="btn-text-danger" onclick="clearDocuments()"><i class="fa-regular fa-trash-can"></i> Clear All</button>
+                </div>
+                <div class="doc-list" id="docList">
+                    {% if indexed_files %}
+                        {% for f in indexed_files %}
+                        <div class="doc-pill">
+                            <i class="fa-solid fa-file-pdf"></i>
+                            <div class="doc-meta">
+                                <span class="doc-name">{{ f.filename }}</span>
+                                <span class="doc-stats">{{ f.pages }} pages • {{ f.chunks }} chunks</span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="empty-docs" id="emptyDocs">
+                            <i class="fa-regular fa-folder-open"></i>
+                            <p>No documents uploaded yet. Upload PDFs to ground AI answers.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Ollama Connection Status -->
+            <div class="sidebar-footer">
+                <div class="ollama-pill {% if ollama_info.available %}online{% else %}offline{% endif %}">
+                    <span class="dot"></span>
+                    <div class="ollama-text">
+                        <span class="ollama-title">{{ ollama_info.message }}</span>
+                        <span class="ollama-model">Model: {{ ollama_info.active_model }}</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Right Main Chat Area -->
+        <main class="chat-main">
+            <!-- Top Chat Header -->
+            <header class="chat-header">
+                <div class="header-left">
+                    <h1>RAG AI Assistant</h1>
+                    <p>Answering from both uploaded documents & LLM knowledge</p>
+                </div>
+
+                <!-- Mode Selector -->
+                <div class="mode-selector">
+                    <button type="button" class="mode-btn active" data-mode="hybrid" onclick="setMode('hybrid')">
+                        <i class="fa-solid fa-bolt"></i> Hybrid (Doc + LLM)
+                    </button>
+                    <button type="button" class="mode-btn" data-mode="doc_only" onclick="setMode('doc_only')">
+                        <i class="fa-solid fa-file-shield"></i> Strict Doc Only
+                    </button>
+                    <button type="button" class="mode-btn" data-mode="llm_only" onclick="setMode('llm_only')">
+                        <i class="fa-solid fa-robot"></i> General LLM
+                    </button>
+                </div>
+            </header>
+
+            <!-- Chat Message Feed -->
+            <div class="chat-feed" id="chatFeed">
+                <div class="message-bubble assistant">
+                    <div class="bubble-avatar"><i class="fa-solid fa-robot"></i></div>
+                    <div class="bubble-content">
+                        <p>Hello! I am your RAG Chatbot. Upload PDF documents to the Knowledge Base on the left, and ask me any question.</p>
+                        <p>I will retrieve the most relevant sections using vector embeddings and synthesize an accurate answer with citations!</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat Input Bar -->
+            <footer class="chat-footer">
+                <form id="chatForm" class="chat-input-wrapper">
+                    <textarea id="messageInput" placeholder="Ask a question about your uploaded documents or any general topic..." rows="1"></textarea>
+                    <button type="submit" id="sendBtn" class="send-btn">
+                        <i class="fa-solid fa-paper-plane"></i>
+                    </button>
+                </form>
+            </footer>
+        </main>
+    </div>
+
+    <!-- Citations Modal -->
+    <div id="sourcesModal" class="modal-overlay hidden" onclick="closeModal(event)">
+        <div class="modal-card" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-quote-left"></i> Retrieved Source Citations</h3>
+                <button type="button" class="close-btn" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body" id="modalSourcesList"></div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+</body>
+</html>

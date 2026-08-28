@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>03 - Multi-Agent IT Service Desk</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Top Navbar -->
+        <header class="header">
+            <div class="logo-group">
+                <div class="logo-icon"><i class="fa-solid fa-headset"></i></div>
+                <div>
+                    <h1>Multi-Agent IT Service Desk</h1>
+                    <p class="subtitle">Autonomous 5-Agent Collaborative IT Ticket Resolution System</p>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="status-badge {% if ollama_info.available %}online{% else %}offline{% endif %}">
+                    <span class="dot"></span>
+                    <span>{{ ollama_info.message }}</span>
+                </div>
+                <a href="{{ url_for('admin') }}" class="btn-admin">
+                    <i class="fa-solid fa-database"></i> IT Admin & DB Explorer
+                </a>
+            </div>
+        </header>
+
+        <!-- Main Layout: Left Submit Form, Right Visual Agent Pipeline -->
+        <div class="main-grid">
+            <!-- Left Column: IT Request Form -->
+            <div class="card request-card">
+                <div class="card-header">
+                    <i class="fa-solid fa-ticket"></i>
+                    <h2>Submit Employee IT Request</h2>
+                </div>
+
+                <form id="ticketForm">
+                    <div class="form-group">
+                        <label><i class="fa-solid fa-user"></i> Select Employee Profile</label>
+                        <select id="employeeSelect" class="custom-select" onchange="updateEmployeeDetails()">
+                            {% for e in employees %}
+                            <option value="{{ e.email }}" data-name="{{ e.name }}" data-dept="{{ e.department }}">
+                                {{ e.name }} ({{ e.department }}) - {{ e.email }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label><i class="fa-solid fa-comment-dots"></i> Issue Description</label>
+                        <textarea id="requestText" class="custom-textarea" rows="4" placeholder="Describe the IT issue (e.g. 'VPN is not connecting - getting error 806 timeout')..."></textarea>
+                    </div>
+
+                    <!-- Quick Sample Scenario Buttons -->
+                    <div class="quick-scenarios">
+                        <span class="scenario-label">Quick Scenario Fill:</span>
+                        <div class="scenario-chips">
+                            <button type="button" class="chip" onclick="fillScenario('VPN is not connecting, getting authentication tunnel timeout error 806.')">
+                                🌐 VPN Connection Failure
+                            </button>
+                            <button type="button" class="chip" onclick="fillScenario('Cannot access Jira engineering board. Getting 403 forbidden error.')">
+                                🔐 Jira Access Request
+                            </button>
+                            <button type="button" class="chip" onclick="fillScenario('My laptop screen is flickering and repeatedly crashing with Blue Screen BSOD.')">
+                                💻 BSOD Hardware Crash
+                            </button>
+                            <button type="button" class="chip" onclick="fillScenario('Need password reset for Okta account and resync MFA push notifications.')">
+                                🔑 Password & MFA Reset
+                            </button>
+                        </div>
+                    </div>
+
+                    <button type="submit" id="submitBtn" class="btn-primary-block">
+                        <i class="fa-solid fa-play"></i> Run 5-Agent Multi-Agent Workflow
+                    </button>
+                </form>
+            </div>
+
+            <!-- Right Column: Multi-Agent Workflow Pipeline Visualizer -->
+            <div class="card pipeline-card">
+                <div class="card-header">
+                    <i class="fa-solid fa-network-wired"></i>
+                    <h2>Multi-Agent Pipeline Trace</h2>
+                    <span class="badge-waiting" id="pipelineStatus">Idle</span>
+                </div>
+
+                <!-- 5 Workflow Agents Timeline matching the PDF -->
+                <div class="pipeline-timeline">
+                    <!-- Agent 1 -->
+                    <div class="agent-step" id="step-1">
+                        <div class="step-icon"><i class="fa-solid fa-user-tie"></i></div>
+                        <div class="step-content">
+                            <div class="step-header">
+                                <h4>1. Manager Agent</h4>
+                                <span class="step-status">Pending</span>
+                            </div>
+                            <p class="step-desc">Classify problem category & determine urgency</p>
+                            <div class="step-output hidden" id="out-1"></div>
+                        </div>
+                    </div>
+
+                    <!-- Agent 2 -->
+                    <div class="agent-step" id="step-2">
+                        <div class="step-icon"><i class="fa-solid fa-wrench"></i></div>
+                        <div class="step-content">
+                            <div class="step-header">
+                                <h4>2. Troubleshooting Agent</h4>
+                                <span class="step-status">Pending</span>
+                            </div>
+                            <p class="step-desc">Formulate technical diagnostic procedures</p>
+                            <div class="step-output hidden" id="out-2"></div>
+                        </div>
+                    </div>
+
+                    <!-- Agent 3 -->
+                    <div class="agent-step" id="step-3">
+                        <div class="step-icon"><i class="fa-solid fa-book-open"></i></div>
+                        <div class="step-content">
+                            <div class="step-header">
+                                <h4>3. Knowledge Agent</h4>
+                                <span class="step-status">Pending</span>
+                            </div>
+                            <p class="step-desc">Search organization knowledge base & SOPs</p>
+                            <div class="step-output hidden" id="out-3"></div>
+                        </div>
+                    </div>
+
+                    <!-- Agent 4 -->
+                    <div class="agent-step" id="step-4">
+                        <div class="step-icon"><i class="fa-solid fa-database"></i></div>
+                        <div class="step-content">
+                            <div class="step-header">
+                                <h4>4. Database Agent</h4>
+                                <span class="step-status">Pending</span>
+                            </div>
+                            <p class="step-desc">Check employee, device & ticket records in SQLite</p>
+                            <div class="step-output hidden" id="out-4"></div>
+                        </div>
+                    </div>
+
+                    <!-- Agent 5 & Decision -->
+                    <div class="agent-step" id="step-5">
+                        <div class="step-icon"><i class="fa-solid fa-circle-check"></i></div>
+                        <div class="step-content">
+                            <div class="step-header">
+                                <h4>5. Response Agent</h4>
+                                <span class="step-status">Pending</span>
+                            </div>
+                            <p class="step-desc">Problem Solved? (YES: Close Ticket / NO: Human Escalation)</p>
+                            <div class="step-output hidden" id="out-5"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Final Response Outcome Card -->
+                <div class="final-outcome-card hidden" id="finalOutcome">
+                    <div class="outcome-header">
+                        <span class="ticket-tag" id="ticketNumberBadge">INC-00000</span>
+                        <span class="decision-badge" id="decisionBadge">RESOLVED</span>
+                    </div>
+                    <div class="outcome-body">
+                        <p class="outcome-text" id="finalResponseText"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/it_desk.js') }}"></script>
+</body>
+</html>

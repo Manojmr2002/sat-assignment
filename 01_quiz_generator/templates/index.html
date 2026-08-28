@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>01 - AI Quiz Generator</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Top Navigation -->
+        <header class="header">
+            <div class="logo-group">
+                <div class="logo-icon"><i class="fa-solid fa-brain"></i></div>
+                <div>
+                    <h1>AI Quiz Generator</h1>
+                    <p class="subtitle">Generate candidate assessment MCQs from documents with Ollama & LangChain</p>
+                </div>
+            </div>
+            <div class="status-badge {% if ollama_info.available %}online{% else %}offline{% endif %}">
+                <span class="dot"></span>
+                <span>{{ ollama_info.message }}</span>
+            </div>
+        </header>
+
+        <!-- Main Form Card -->
+        <div class="card main-card">
+            <form id="quizForm" enctype="multipart/form-data">
+                <div class="grid-2">
+                    <!-- Left: Upload / Text Source -->
+                    <div class="section-box">
+                        <div class="section-title">
+                            <i class="fa-solid fa-file-arrow-up"></i>
+                            <h3>1. Source Material</h3>
+                        </div>
+                        
+                        <div class="tab-group">
+                            <button type="button" class="tab-btn active" onclick="switchTab('upload')">
+                                <i class="fa-solid fa-file-pdf"></i> Upload Document
+                            </button>
+                            <button type="button" class="tab-btn" onclick="switchTab('text')">
+                                <i class="fa-solid fa-align-left"></i> Paste Raw Text
+                            </button>
+                        </div>
+
+                        <div id="uploadTab" class="tab-content active">
+                            <div class="drop-zone" id="dropZone">
+                                <i class="fa-solid fa-cloud-arrow-up drop-icon"></i>
+                                <p class="drop-text">Drag & drop PDF, TXT, or DOCX</p>
+                                <span class="drop-sub">or click to browse files</span>
+                                <input type="file" id="documentFile" name="document" accept=".pdf,.txt,.md,.docx" hidden>
+                            </div>
+                            <div id="fileInfo" class="file-preview-pill hidden">
+                                <i class="fa-solid fa-file-lines"></i>
+                                <span id="fileName">No file selected</span>
+                                <button type="button" class="remove-btn" onclick="clearFile()"><i class="fa-solid fa-xmark"></i></button>
+                            </div>
+                        </div>
+
+                        <div id="textTab" class="tab-content">
+                            <textarea name="raw_text" class="custom-textarea" placeholder="Paste textbook excerpts, candidate assessment requirements, or article text here..."></textarea>
+                        </div>
+                    </div>
+
+                    <!-- Right: Quiz Parameters -->
+                    <div class="section-box">
+                        <div class="section-title">
+                            <i class="fa-solid fa-sliders"></i>
+                            <h3>2. Assessment Settings</h3>
+                        </div>
+
+                        <div class="form-group">
+                            <label><i class="fa-solid fa-list-ol"></i> Number of Questions</label>
+                            <div class="range-wrap">
+                                <input type="range" name="num_questions" min="3" max="15" value="5" id="numQuestions" oninput="document.getElementById('numVal').innerText = this.value">
+                                <span class="range-badge" id="numVal">5</span>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label><i class="fa-solid fa-gauge-high"></i> Difficulty Level</label>
+                            <div class="pill-selector">
+                                <label class="pill-option">
+                                    <input type="radio" name="difficulty" value="Easy">
+                                    <span>Easy</span>
+                                </label>
+                                <label class="pill-option">
+                                    <input type="radio" name="difficulty" value="Medium" checked>
+                                    <span>Medium</span>
+                                </label>
+                                <label class="pill-option">
+                                    <input type="radio" name="difficulty" value="Hard">
+                                    <span>Hard</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label><i class="fa-solid fa-bullseye"></i> Focus Topic / Keyword</label>
+                            <input type="text" name="topic" class="custom-input" placeholder="e.g. Core Architecture, Definitions, Logic..." value="General Overview">
+                        </div>
+
+                        <div class="form-group">
+                            <label><i class="fa-solid fa-microchip"></i> Target LLM Model</label>
+                            <select name="model" class="custom-input">
+                                {% if ollama_info.models %}
+                                    {% for m in ollama_info.models %}
+                                        <option value="{{ m }}" {% if m == ollama_info.active_model %}selected{% endif %}>{{ m }} (Local Ollama)</option>
+                                    {% endfor %}
+                                {% else %}
+                                    <option value="llama3">llama3 (Ollama / Auto Heuristic)</option>
+                                    <option value="mistral">mistral</option>
+                                    <option value="gemma">gemma</option>
+                                    <option value="phi3">phi3</option>
+                                {% endif %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-footer">
+                    <button type="submit" class="btn-primary" id="generateBtn">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i>
+                        <span>Generate Assessment Quiz</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Loading Overlay -->
+        <div id="loadingOverlay" class="loading-overlay hidden">
+            <div class="spinner"></div>
+            <h3>Analyzing Document & Generating Questions...</h3>
+            <p>LangChain prompt pipeline and Ollama LLM are formulating MCQs.</p>
+        </div>
+    </div>
+
+    <script>
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            if(tab === 'upload') {
+                document.querySelectorAll('.tab-btn')[0].classList.add('active');
+                document.getElementById('uploadTab').classList.add('active');
+            } else {
+                document.querySelectorAll('.tab-btn')[1].classList.add('active');
+                document.getElementById('textTab').classList.add('active');
+            }
+        }
+
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('documentFile');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length) {
+                fileInput.files = e.dataTransfer.files;
+                handleFileSelect();
+            }
+        });
+
+        fileInput.addEventListener('change', handleFileSelect);
+
+        function handleFileSelect() {
+            if (fileInput.files.length > 0) {
+                fileName.innerText = fileInput.files[0].name;
+                fileInfo.classList.remove('hidden');
+                dropZone.classList.add('has-file');
+            }
+        }
+
+        function clearFile() {
+            fileInput.value = '';
+            fileInfo.classList.add('hidden');
+            dropZone.classList.remove('has-file');
+        }
+
+        document.getElementById('quizForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const form = e.target;
+            const formData = new FormData(form);
+            
+            const overlay = document.getElementById('loadingOverlay');
+            overlay.classList.remove('hidden');
+
+            try {
+                const resp = await fetch('/generate', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await resp.json();
+                if (data.success && data.redirect_url) {
+                    window.location.href = data.redirect_url;
+                } else {
+                    alert('Generation Error: ' + (data.error || 'Failed to generate'));
+                    overlay.classList.add('hidden');
+                }
+            } catch (err) {
+                alert('Network Error: ' + err.message);
+                overlay.classList.add('hidden');
+            }
+        });
+    </script>
+</body>
+</html>

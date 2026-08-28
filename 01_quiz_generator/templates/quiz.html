@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ quiz.title }} - Assessment Mode</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo-group">
+                <a href="{{ url_for('index') }}" class="back-link"><i class="fa-solid fa-arrow-left"></i> Back to Setup</a>
+                <div>
+                    <h1>{{ quiz.title }}</h1>
+                    <div class="meta-tags">
+                        <span class="tag"><i class="fa-solid fa-file"></i> {{ quiz.doc_name }}</span>
+                        <span class="tag"><i class="fa-solid fa-layer-group"></i> {{ quiz.difficulty }}</span>
+                        <span class="tag"><i class="fa-solid fa-list-check"></i> {{ quiz.questions|length }} Questions</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Quiz Controls & Timer -->
+            <div class="timer-box" id="timerBox">
+                <i class="fa-regular fa-clock"></i>
+                <span id="timeRemaining">10:00</span>
+            </div>
+        </header>
+
+        <!-- Quiz Progress -->
+        <div class="progress-container">
+            <div class="progress-bar" id="progressBar" style="width: 0%;"></div>
+        </div>
+
+        <!-- Quiz Form / Question Cards -->
+        <form id="assessmentForm">
+            <div class="questions-list">
+                {% for q in quiz.questions %}
+                <div class="question-card" id="card_{{ q.id }}">
+                    <div class="q-header">
+                        <span class="q-badge">Question {{ q.id }} of {{ quiz.questions|length }}</span>
+                    </div>
+                    <h3 class="q-title">{{ q.question }}</h3>
+
+                    <div class="options-grid">
+                        {% for opt_key, opt_val in q.options.items() %}
+                        <label class="option-label" id="opt_label_{{ q.id }}_{{ opt_key }}">
+                            <input type="radio" name="answer_{{ q.id }}" value="{{ opt_key }}" onchange="updateProgress()">
+                            <span class="opt-letter">{{ opt_key }}</span>
+                            <span class="opt-text">{{ opt_val }}</span>
+                            <i class="fa-solid fa-circle-check feedback-icon correct hidden"></i>
+                            <i class="fa-solid fa-circle-xmark feedback-icon incorrect hidden"></i>
+                        </label>
+                        {% endfor %}
+                    </div>
+
+                    <div class="explanation-box hidden" id="exp_{{ q.id }}">
+                        <div class="exp-title"><i class="fa-solid fa-lightbulb"></i> Explanation</div>
+                        <p class="exp-content">{{ q.explanation }}</p>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- Bottom Actions -->
+            <div class="quiz-footer">
+                <button type="submit" class="btn-primary" id="submitQuizBtn">
+                    <i class="fa-solid fa-paper-plane"></i> Submit & Grade Assessment
+                </button>
+                <div class="export-group hidden" id="exportGroup">
+                    <a href="{{ url_for('export_pdf', quiz_id=quiz.id) }}" class="btn-outline">
+                        <i class="fa-solid fa-file-pdf"></i> Download PDF Assessment
+                    </a>
+                    <a href="{{ url_for('export_json', quiz_id=quiz.id) }}" class="btn-outline">
+                        <i class="fa-solid fa-code"></i> Export JSON
+                    </a>
+                    <a href="{{ url_for('index') }}" class="btn-primary">
+                        <i class="fa-solid fa-rotate-right"></i> Create New Quiz
+                    </a>
+                </div>
+            </div>
+        </form>
+
+        <!-- Score Modal / Summary Bar -->
+        <div id="resultsCard" class="card results-card hidden">
+            <div class="score-circle" id="scoreCircle">
+                <span id="scorePercent">0%</span>
+                <span class="score-sub">Final Score</span>
+            </div>
+            <div class="results-info">
+                <h2 id="resultGrade">Assessment Completed</h2>
+                <p id="resultDetails">You answered 0 out of 0 questions correctly.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const totalQuestions = {{ quiz.questions|length }};
+        const quizId = "{{ quiz.id }}";
+        let isSubmitted = false;
+
+        // Timer
+        let secondsLeft = totalQuestions * 120; // 2 minutes per question
+        const timerEl = document.getElementById('timeRemaining');
+        const timerInterval = setInterval(() => {
+            if (isSubmitted) return;
+            secondsLeft--;
+            if (secondsLeft <= 0) {
+                clearInterval(timerInterval);
+                timerEl.innerText = "Time's Up!";
+                submitAssessment();
+            } else {
+                const mins = Math.floor(secondsLeft / 60);
+                const secs = secondsLeft % 60;
+                timerEl.innerText = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+            }
+        }, 1000);
+
+        function updateProgress() {
+            let answered = 0;
+            for (let i = 1; i <= totalQuestions; i++) {
+                const checked = document.querySelector(`input[name="answer_${i}"]:checked`);
+                if (checked) answered++;
+            }
+            const pct = Math.round((answered / totalQuestions) * 100);
+            document.getElementById('progressBar').style.width = pct + '%';
+        }
+
+        document.getElementById('assessmentForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            submitAssessment();
+        });
+
+        async function submitAssessment() {
+            if (isSubmitted) return;
+            isSubmitted = true;
+            clearInterval(timerInterval);
+
+            const answers = {};
+            for (let i = 1; i <= totalQuestions; i++) {
+                const checked = document.querySelector(`input[name="answer_${i}"]:checked`);
+                answers[i] = checked ? checked.value : '';
+            }
+
+            try {
+                const resp = await fetch(`/evaluate/${quizId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ answers })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    displayResults(data);
+                } else {
+                    alert('Evaluation error: ' + data.error);
+                }
+            } catch (err) {
+                alert('Submission failed: ' + err.message);
+            }
+        }
+
+        function displayResults(data) {
+            // Show score card
+            const resultsCard = document.getElementById('resultsCard');
+            resultsCard.classList.remove('hidden');
+            document.getElementById('scorePercent').innerText = `${data.percentage}%`;
+            document.getElementById('resultDetails').innerText = `You answered ${data.score} out of ${data.total} questions correctly.`;
+            
+            if (data.percentage >= 80) {
+                document.getElementById('resultGrade').innerText = "🎉 Outstanding Performance!";
+                document.getElementById('scoreCircle').style.borderColor = "#10b981";
+            } else if (data.percentage >= 50) {
+                document.getElementById('resultGrade').innerText = "👍 Good Effort!";
+                document.getElementById('scoreCircle').style.borderColor = "#f59e0b";
+            } else {
+                document.getElementById('resultGrade').innerText = "📚 Needs Review";
+                document.getElementById('scoreCircle').style.borderColor = "#ef4444";
+            }
+
+            // Disable all inputs and highlight correct/incorrect
+            document.querySelectorAll('input[type="radio"]').forEach(r => r.disabled = true);
+            document.getElementById('submitQuizBtn').classList.add('hidden');
+            document.getElementById('exportGroup').classList.remove('hidden');
+
+            data.results.forEach(res => {
+                const qid = res.id;
+                const correctOpt = res.correct_answer;
+                const userOpt = res.user_choice;
+
+                // Highlight correct option in green
+                const correctLabel = document.getElementById(`opt_label_${qid}_${correctOpt}`);
+                if (correctLabel) {
+                    correctLabel.classList.add('opt-correct');
+                    correctLabel.querySelector('.feedback-icon.correct').classList.remove('hidden');
+                }
+
+                // If user chose wrong, highlight in red
+                if (userOpt && userOpt !== correctOpt) {
+                    const wrongLabel = document.getElementById(`opt_label_${qid}_${userOpt}`);
+                    if (wrongLabel) {
+                        wrongLabel.classList.add('opt-wrong');
+                        wrongLabel.querySelector('.feedback-icon.incorrect').classList.remove('hidden');
+                    }
+                }
+
+                // Show explanation
+                const expBox = document.getElementById(`exp_${qid}`);
+                if (expBox) {
+                    expBox.classList.remove('hidden');
+                }
+            });
+
+            // Scroll to top of results
+            resultsCard.scrollIntoView({ behavior: 'smooth' });
+        }
+    </script>
+</body>
+</html>
